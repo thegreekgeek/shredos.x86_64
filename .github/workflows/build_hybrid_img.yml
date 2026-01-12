@@ -1,0 +1,31 @@
+name: Makefile CI
+
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+
+jobs:
+  build:
+
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Make clean
+      run: make clean
+
+    - name: Create Config
+      run: make shredos_iso_extra_defconfig
+
+    - name: MAKEIT
+      run: make
+
+    - name: upload artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: shredos-fork-build
+        path: |
+          output/images/shredos*.img
