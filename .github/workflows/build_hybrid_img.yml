@@ -8,12 +8,28 @@ on:
 
 jobs:
   build:
-
     runs-on: ubuntu-latest
 
     steps:
     - uses: actions/checkout@v4
 
+    # This is the critical step to reclaim ~20GB+ of space
+    - name: Free Disk Space (Ubuntu)
+      uses: jlumbroso/free-disk-space@main
+      with:
+        tool-cache: true
+        android: true
+        dotnet: true
+        haskell: true
+        large-packages: true
+        docker-images: true
+        swap-storage: true
+
+    - name: Check available space
+      run: df -h
+
+    # Buildroot doesn't need 'make clean' on a fresh runner, 
+    # but keeping it doesn't hurt if you prefer it.
     - name: Make clean
       run: make clean
 
@@ -22,6 +38,9 @@ jobs:
 
     - name: MAKEIT
       run: make
+
+    - name: Final Disk Usage
+      run: df -h
 
     - name: upload artifact
       uses: actions/upload-artifact@v4
