@@ -28,6 +28,9 @@ jobs:
     - name: Check available space
       run: df -h
 
+    - name: Install build dependencies
+      run: sudo apt-get update && sudo apt-get install -y libelf-dev
+
     # Buildroot doesn't need 'make clean' on a fresh runner, 
     # but keeping it doesn't hurt if you prefer it.
     - name: Make clean
