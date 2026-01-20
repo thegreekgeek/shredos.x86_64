@@ -43,7 +43,7 @@ ifeq ($(BR2_PACKAGE_NWIPE),y)
 
 ifeq ($(BR2_PACKAGE_NWIPE_VERSION_GIT_REVISION),y)
 # Take first 7 characters of the git revision and append suffix
-NWIPE_VERSION_BANNER := $(shell printf "%.7s-commit-dev" "$(BR2_PACKAGE_NWIPE_GIT_REVISION)")
+NWIPE_VERSION_BANNER := $(shell printf "%.7s-commit-dev" "$(call qstrip,$(BR2_PACKAGE_NWIPE_GIT_REVISION))")
 else
 NWIPE_VERSION_BANNER := $(NWIPE_VERSION)
 endif
