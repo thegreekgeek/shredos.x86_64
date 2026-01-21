@@ -37,7 +37,7 @@ jobs:
       run: make shredos_iso_extra_defconfig
 
     - name: MAKEIT
-      run: make
+      run: make -j2
 
     - name: Final Disk Usage
       run: df -h
