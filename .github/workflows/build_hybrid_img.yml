@@ -48,3 +48,4 @@ jobs:
         name: shredos-fork-build
         path: |
           output/images/shredos*.img
+          output/images/shredos*.iso
