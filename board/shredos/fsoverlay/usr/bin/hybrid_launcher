@@ -1,0 +1,319 @@
+#!/bin/bash
+# ShredOS Hybrid Launcher
+# Uses wiper for fast SSD/NVMe wiping, then nwipe for PDF certificate generation
+# Based on nwipe_launcher with wiper integration
+#
+trap "echo" INT
+shopt -s nocasematch
+date_format="+%Y/%m/%d %H:%M:%S"
+
+# Initialize variables
+previous_sha1=""
+loop_count=0
+exclude_boot_disc=0
+exclude_drives=0
+transfer_status="SUCCESS"
+launcher_options=""
+tftp_errors="ERROR\|Transfer Timed out\|Network is unreachable"
+
+# Wait for USB initialization
+loop_count_total=30
+loop_count_check=10
+printf "\n"
+while (( loop_count_total > 0 )); do
+	sha1=$(dmesg | grep -i USB | sha1sum)
+	if [[ "$previous_sha1" == "$sha1" ]]; then
+		break
+	fi
+	previous_sha1=$sha1
+	while (( loop_count_check > 0 )); do
+		printf "Waiting for all USB devices to be initialised, timeout $loop_count_total \r"
+		((loop_count_total--))
+		((loop_count_check--))
+		sleep 1
+	done
+	loop_count_check=10
+done
+printf "\n"
+
+echo "`date "$date_format"`] Transfer log" > transfer.log
+echo "`date "$date_format"`] Hybrid wipe log" > hybrid_wipe.log
+
+# Create necessary directories
+for dir in /imported /etc/nwipe /exported; do
+	test -d $dir || mkdir -p $dir
+done
+
+# Locate ShredOS boot disc
+printf "`date "$date_format"`] Searching for boot USB drive.\n" 2>&1 | tee -a transfer.log
+drive_partition=$(find_shredos_boot_disc.sh)
+drive=""
+if [ "$drive_partition" == "" ]; then
+	printf "`date "$date_format"`] No exFAT/FAT32/FAT16 USB drive found\n" 2>&1 | tee -a transfer.log
+else
+	printf "`date "$date_format"`] Found USB drive $drive_partition\n" 2>&1 | tee -a transfer.log
+	if [ -f /boot_device.txt ]; then
+		drive=$(cat /boot_device.txt)
+	fi
+fi
+
+# Check for boot disc exclusion
+exclude_boot_disc_cmd=""
+exclude_boot_disc_status=$(kernel_cmdline_extractor shredos_exclude_boot_disc)
+if [ $? == 0 ]; then
+	if [[ "${exclude_boot_disc_status,,}" == "yes" ]]; then
+		exclude_boot_disc_cmd="--exclude=$drive"
+	fi
+else
+	if [ -f "/exclude_disc.txt" ]; then
+		exclude_boot_disc_cmd="--exclude=$drive"
+	fi
+fi
+
+# Initialize options
+country_code=""
+nwipe_options_string=""
+wiper_options_string=""
+autopoweroff=0
+autoreboot=""
+use_wiper=1  # Default to using wiper
+logfile="nwipe_log_$(date +%Y%m%d-%H%M%S).txt"
+
+# Keyboard layout
+country_code=$(kernel_cmdline_extractor loadkeys)
+if [ $? == 0 ] && [ "$country_code" != "" ]; then
+	loadkeys $country_code
+fi
+
+# Read wiper options from kernel command line
+wiper_options_string=$(kernel_cmdline_extractor wiper_options)
+if [ $? == 0 ]; then
+	wiper_options_flag=1
+else
+	wiper_options_flag=0
+fi
+
+# Read nwipe options from kernel command line
+nwipe_options_string=$(kernel_cmdline_extractor nwipe_options)
+if [ $? == 0 ]; then
+	nwipe_options_flag=1
+
+	# Handle autopoweroff
+	case "$nwipe_options_string" in
+	*--autopoweroff*) autopoweroff=1 ;;
+	*               ) autopoweroff=0 ;;
+	esac
+
+	if [ $autopoweroff == 1 ]; then
+		echo $nwipe_options_string > nwipe_options.txt
+		sed -i 's/--autopoweroff/--nowait/g' nwipe_options.txt
+		nwipe_options_string=`cat nwipe_options.txt`
+		rm nwipe_options.txt
+	fi
+else
+	nwipe_options_flag=0
+fi
+
+# Check for autoreboot
+autoreboot=$(kernel_cmdline_extractor shredos_autoreboot)
+if [[ "$autoreboot" == "enable" ]]; then
+	case "$nwipe_options_string" in
+		*--nowait*)  ;;
+		*         ) launcher_options+="--nowait" ;;
+	esac
+fi
+
+# Check if user wants nwipe-only mode
+nwipe_only=$(kernel_cmdline_extractor nwipe_only)
+if [[ "$nwipe_only" == "yes" ]]; then
+	use_wiper=0
+fi
+
+# Display banner
+printf "\n"
+printf "╔════════════════════════════════════════════════════════════════════════╗\n"
+printf "║                    ShredOS - Hybrid Wipe Mode                          ║\n"
+printf "║                                                                        ║\n"
+printf "║  Phase 1: Fast wipe using wiper (SSD/NVMe optimized)                  ║\n"
+printf "║  Phase 2: Verification and PDF generation using nwipe                 ║\n"
+printf "║                                                                        ║\n"
+printf "╚════════════════════════════════════════════════════════════════════════╝\n"
+printf "\n"
+
+# List detected drives
+printf "Detected storage devices:\n"
+lsblk -d -o NAME,TYPE,SIZE,MODEL | grep -E "disk|nvme"
+printf "\n"
+
+if [ "$drive" != "" ]; then
+	printf "Boot device (will be excluded): $drive\n"
+	printf "\n"
+fi
+
+sleep 3
+
+# Main loop
+while true
+do
+	# ========================================================================
+	# PHASE 1: WIPER (Fast secure erase)
+	# ========================================================================
+
+	if [ $use_wiper == 1 ]; then
+		printf "\n"
+		printf "═══════════════════════════════════════════════════════════════════════\n"
+		printf " PHASE 1: Fast Secure Erase with Wiper\n"
+		printf "═══════════════════════════════════════════════════════════════════════\n"
+		printf "\n"
+		printf "`date "$date_format"`] Starting wiper phase...\n" 2>&1 | tee -a hybrid_wipe.log
+
+		# Build wiper command
+		wiper_cmd="/usr/bin/wiper --yes --skip-verify"
+
+		# Build device list, excluding boot disc if needed
+		device_list=""
+		if [ "$drive" != "" ] && [[ "${exclude_boot_disc_status,,}" == "yes" || -f "/exclude_disc.txt" ]]; then
+			printf "`date "$date_format"`] Excluding boot drive from wiper: $drive\n" 2>&1 | tee -a hybrid_wipe.log
+			# Get all block devices except the boot drive
+			for dev in $(lsblk -d -n -o NAME | grep -E "^(sd|nvme)"); do
+				if [ "/dev/$dev" != "$drive" ]; then
+					device_list="$device_list --device $dev"
+				fi
+			done
+		else
+			device_list="--all"
+		fi
+
+		wiper_cmd="$wiper_cmd $device_list"
+
+		# Add user-specified wiper options
+		if [ $wiper_options_flag == 1 ]; then
+			wiper_cmd="$wiper_cmd $wiper_options_string"
+		fi
+
+		# Log and execute
+		printf "`date "$date_format"`] Executing: $wiper_cmd\n" 2>&1 | tee -a hybrid_wipe.log
+
+		$wiper_cmd 2>&1 | tee -a hybrid_wipe.log
+		wiper_exit_code=${PIPESTATUS[0]}
+
+		if [ $wiper_exit_code -eq 0 ]; then
+			printf "\n`date "$date_format"`] ✓ Wiper phase completed successfully\n\n" 2>&1 | tee -a hybrid_wipe.log
+		else
+			printf "\n`date "$date_format"`] ⚠ Wiper exited with code $wiper_exit_code\n\n" 2>&1 | tee -a hybrid_wipe.log
+		fi
+
+		sleep 2
+	fi
+
+	# ========================================================================
+	# PHASE 2: NWIPE (Verification and PDF generation)
+	# ========================================================================
+
+	printf "\n"
+	printf "═══════════════════════════════════════════════════════════════════════\n"
+	printf " PHASE 2: Verification and PDF Certificate Generation\n"
+	printf "═══════════════════════════════════════════════════════════════════════\n"
+	printf "\n"
+	printf "`date "$date_format"`] Starting nwipe for verification and PDF generation...\n" 2>&1 | tee -a hybrid_wipe.log
+
+	# Run nwipe with full verification and PDF generation
+	# Using --verify=last which verifies the last pass
+	# Remove --nogui to show the nwipe interface during verification
+	nwipe_verify_options="--verify=last --nousb"
+
+	if [ $nwipe_options_flag == 0 ]; then
+		/usr/bin/nwipe --logfile=$logfile $nwipe_verify_options $launcher_options $exclude_boot_disc_cmd
+	else
+		/usr/bin/nwipe --logfile=$logfile $nwipe_verify_options $launcher_options $nwipe_options_string $exclude_boot_disc_cmd
+	fi
+
+	printf "`date "$date_format"`] Nwipe completed - PDF certificates should be generated\n" 2>&1 | tee -a hybrid_wipe.log
+
+	# ========================================================================
+	# PHASE 3: Log archiving (keeping original nwipe_launcher logic)
+	# ========================================================================
+
+	# Archive logs to USB
+	/usr/bin/archive_log.sh -w
+
+	# Check for PDFs
+	grep -i "Model" /*.pdf 2>/dev/null
+	if [ $? == 0 ]; then
+		printf "`date "$date_format"`] ⚠ WARNING: PDFs not archived to USB\n" 2>&1 | tee -a transfer.log
+		transfer_status="FAIL"
+	else
+		printf "`date "$date_format"`] ✓ All PDFs and logs archived successfully\n" 2>&1 | tee -a transfer.log
+	fi
+
+	# Handle auto-reboot
+	if [ "$autoreboot" == "enable" ]; then
+		if [[ "$transfer_status" == "SUCCESS" ]]; then
+			printf "`date "$date_format"`] Auto-rebooting in 5 seconds...\n"
+			sleep 5
+			shutdown -r now
+			sleep 30
+		else
+			printf "`date "$date_format"`] Transfer error - waiting for user review\n" 2>&1 | tee -a transfer.log
+		fi
+	fi
+
+	# Handle auto-poweroff
+	if [ $autopoweroff == 1 ]; then
+		if [[ "$transfer_status" == "SUCCESS" ]]; then
+			printf "`date "$date_format"`] Auto-powering off in 5 seconds...\n"
+			sleep 5
+			init 0
+		else
+			printf "`date "$date_format"`] Transfer error - waiting for user review\n" 2>&1 | tee -a transfer.log
+		fi
+	fi
+
+	# User interaction menu
+	exitloop="1"
+	while [ "$exitloop" == "1" ]
+	do
+		printf "\n"
+		grep -i "Model" /*.pdf 2>/dev/null
+		if [ $? == 0 ]; then
+			printf ">> WARNING << PDFs not saved, plug in USB and press 'a' to archive.\n\n"
+			printf "Paused, press r=reboot, s=shutdown, a=archive to USB, spacebar=restart.\n"
+			Final_message_plus=1
+		else
+			printf "[COMPLETE] All operations finished successfully\n\n"
+			printf "Paused.. press r to reboot, s to shutdown, spacebar to restart.\n"
+			Final_message_plus=0
+		fi
+		printf ">"
+		read -rsn1 input
+		printf "\n"
+		case $input in
+			r|R)
+			printf "Reboot\n"
+			shutdown -r now
+			sleep 10
+			;;
+			s|S)
+			printf "Shutdown\n"
+			shutdown -h now
+			sleep 10
+			;;
+			a|A)
+			if [ $Final_message_plus == 1 ]; then
+				archive_log.sh -w
+			fi
+			;;
+			'')
+			printf "Restart Wipe Process\n"
+			exitloop="0"
+			;;
+			*)
+			printf "Unknown command?\n"
+			;;
+		esac
+	done
+
+	printf " >> Restarting Wipe Process <<\n"
+	sleep 1
+done
+# end of never ending while loop
