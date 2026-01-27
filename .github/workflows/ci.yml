@@ -54,7 +54,8 @@ jobs:
           if [ -d "configs" ]; then
             echo "✓ configs directory exists"
             echo "Configuration files found:"
-            ls -1 configs/*.defconfig 2>/dev/null || echo "No .defconfig files found"
+            ls -1 configs/*defconfig 2>/dev/null | head -5 || echo "No defconfig files found"
+            echo "Total defconfig files: $(ls -1 configs/*defconfig 2>/dev/null | wc -l)"
           else
             echo "✗ configs directory is missing"
             exit 1
