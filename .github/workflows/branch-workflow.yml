@@ -1,0 +1,113 @@
+name: Branch-Specific Workflow
+
+# This workflow demonstrates different ways to trigger actions on specific branches
+on:
+  push:
+    # Run on all branches
+    branches:
+      - '**'
+    # Optionally exclude certain branches
+    # branches-ignore:
+    #   - 'temp/**'
+    #   - 'wip/**'
+  
+  # Run on pull requests targeting any branch
+  pull_request:
+    branches:
+      - '**'
+  
+  # Run on specific branch patterns
+  # Uncomment to enable specific patterns:
+  # push:
+  #   branches:
+  #     - main
+  #     - develop
+  #     - 'feature/**'
+  #     - 'release/**'
+  #     - 'hotfix/**'
+
+# Set minimal permissions for GITHUB_TOKEN
+permissions:
+  contents: read
+
+jobs:
+  branch-info:
+    name: Branch Information
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Display detailed branch information
+        run: |
+          echo "================================================"
+          echo "Branch Information"
+          echo "================================================"
+          echo "Current branch: ${GITHUB_REF#refs/heads/}"
+          echo "Event name: ${{ github.event_name }}"
+          echo "Event action: ${{ github.event.action }}"
+          echo "Repository: ${{ github.repository }}"
+          echo "Commit SHA: ${{ github.sha }}"
+          echo "Actor: ${{ github.actor }}"
+          echo "================================================"
+          
+          # Show git information
+          git branch -a
+          echo "================================================"
+          git log -1 --oneline
+      
+      - name: Run on feature branches
+        if: startsWith(github.ref, 'refs/heads/feature/') || startsWith(github.ref, 'refs/heads/copilot/')
+        run: |
+          echo "This is a feature branch!"
+          echo "Running feature-specific checks..."
+      
+      - name: Run on main branch
+        if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master'
+        run: |
+          echo "This is the main branch!"
+          echo "Running main branch specific tasks..."
+      
+      - name: Run on all other branches
+        if: |
+          !startsWith(github.ref, 'refs/heads/feature/') && 
+          !startsWith(github.ref, 'refs/heads/copilot/') &&
+          github.ref != 'refs/heads/main' && 
+          github.ref != 'refs/heads/master'
+        run: |
+          echo "This is neither main nor a feature branch"
+          echo "Running default checks..."
+
+  example-matrix:
+    name: Example Matrix Build
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        config: [check-configs, check-scripts, validate-structure]
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Run matrix job - ${{ matrix.config }}
+        run: |
+          echo "Running job: ${{ matrix.config }}"
+          case "${{ matrix.config }}" in
+            check-configs)
+              echo "Checking configuration files..."
+              ls -la configs/*.defconfig 2>/dev/null || echo "No config files found"
+              ;;
+            check-scripts)
+              echo "Checking scripts..."
+              find . -name "*.sh" -type f | head -10
+              ;;
+            validate-structure)
+              echo "Validating directory structure..."
+              for dir in board configs package; do
+                if [ -d "$dir" ]; then
+                  echo "✓ $dir exists"
+                fi
+              done
+              ;;
+          esac

@@ -1,0 +1,105 @@
+name: CI
+
+# This workflow runs on all branches, not just main
+on:
+  # Trigger on push to any branch
+  push:
+    branches:
+      - '**'  # This matches all branches including main and feature branches
+  
+  # Trigger on pull requests to any branch
+  pull_request:
+    branches:
+      - '**'
+  
+  # Allow manual triggering from the Actions tab
+  workflow_dispatch:
+    inputs:
+      branch:
+        description: 'Branch to run on'
+        required: false
+        default: 'current'
+
+# Set minimal permissions for GITHUB_TOKEN
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    name: Validate Repository Structure
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      
+      - name: Display branch information
+        run: |
+          echo "Running on branch: ${GITHUB_REF#refs/heads/}"
+          echo "Triggered by: ${{ github.event_name }}"
+          echo "Repository: ${{ github.repository }}"
+      
+      - name: Check required files
+        run: |
+          echo "Checking for required files..."
+          for file in Makefile README.md .gitignore; do
+            if [ -f "$file" ]; then
+              echo "✓ $file exists"
+            else
+              echo "✗ $file is missing"
+              exit 1
+            fi
+          done
+      
+      - name: Validate configs directory
+        run: |
+          if [ -d "configs" ]; then
+            echo "✓ configs directory exists"
+            echo "Configuration files found:"
+            ls -1 configs/*defconfig 2>/dev/null | head -5 || echo "No defconfig files found"
+            echo "Total defconfig files: $(ls -1 configs/*defconfig 2>/dev/null | wc -l)"
+          else
+            echo "✗ configs directory is missing"
+            exit 1
+          fi
+      
+      - name: Check build script
+        run: |
+          if [ -f "build_all_shredos.sh" ]; then
+            echo "✓ build_all_shredos.sh exists"
+            if [ -x "build_all_shredos.sh" ]; then
+              echo "✓ build_all_shredos.sh is executable"
+            else
+              echo "⚠ build_all_shredos.sh is not executable"
+            fi
+          else
+            echo "✗ build_all_shredos.sh is missing"
+          fi
+
+  syntax-check:
+    name: Syntax Check Scripts
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Check shell scripts syntax
+        run: |
+          echo "Checking shell script syntax..."
+          shopt -s globstar nullglob
+          
+          # Find all .sh files
+          for script in **/*.sh; do
+            if [ -f "$script" ]; then
+              echo "Checking $script..."
+              bash -n "$script" && echo "✓ $script syntax OK" || echo "✗ $script has syntax errors"
+            fi
+          done
+          
+          # Check specific important scripts
+          if [ -f "build_all_shredos.sh" ]; then
+            bash -n build_all_shredos.sh && echo "✓ build_all_shredos.sh syntax OK"
+          fi

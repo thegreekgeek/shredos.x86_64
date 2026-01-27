@@ -55,6 +55,18 @@ You can then select one or more drives to be erased, wipe method or pattern to b
 A certificate can optionally be created for each drive erased, the default is to create the certificate, but can be disabled by either an nwipe option applied in grub.cfg or via the nwipe configuration menu. The status of which is saved to the USB stick you booted from, so next time you boot from the USB stick the configuration settings are remembered. The first page of the PDF certificate contains details of the erasure and whether it was succesfully erased, failed due to drive errors, or partially erased due to HPA/DCO hidden sectors. Pages two and three contain the drives smart data.
 ![Example Certificate](/images/PDF_certificate_example.gif)
 
+## GitHub Actions / CI
+
+This repository includes GitHub Actions workflows that run automated checks on **all branches**, not just main. This allows you to:
+
+- Test feature branches before merging
+- Run CI checks on pull requests
+- Validate changes automatically on any branch
+
+For more information about running GitHub Actions on different branches, see the [`.github/workflows/README.md`](.github/workflows/README.md) documentation.
+
+## Table of Contents
+
 1. [What is ShredOS?](#what-is-shredos)
 1. [What do I do after I've erased everything on my disk? What is actually erased?](#what-do-i-do-after-ive-erased-everything-on-my-disk-what-is-actually-erased)
 1. [Nwipe's erasure methods](#nwipes-erasure-methods)
