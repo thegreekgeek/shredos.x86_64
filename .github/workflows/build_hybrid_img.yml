@@ -4,44 +4,38 @@ on:
   push:
     branches: [ "PrimeWorkflow" ]
 
-
 jobs:
   build:
     runs-on: self-hosted
     timeout-minutes: 1440
-    steps:
-    - uses: actions/checkout@v4
+    
+    # Global environment variables for this job
+    env:
+      # This points Buildroot to a permanent folder on your runner's SSD.
+      # It prevents re-downloading the kernel/sources every time.
+      BR2_DL_DIR: /home/rob/buildroot_dl
 
-    # # This is the critical step to reclaim ~20GB+ of space
-    # - name: Free Disk Space (Ubuntu)
-    #   uses: jlumbroso/free-disk-space@main
-    #   with:
-    #     tool-cache: true
-    #     android: true
-    #     dotnet: true
-    #     haskell: true
-    #     large-packages: true
-    #     docker-images: true
-    #     swap-storage: true
+    steps:
+    - name: Checkout Code
+      uses: actions/checkout@v4
+      # Note: This action runs 'git clean -ffdx' by default, 
+      # which is a better 'clean' than 'make clean' provides.
 
     - name: Check available space
       run: df -h
-
-    # Buildroot doesn't need 'make clean' on a fresh runner, 
-    # but keeping it doesn't hurt if you prefer it.
-    - name: Make clean
-      run: make clean
 
     - name: Create Config
       run: make shredos_iso_extra_defconfig
 
     - name: MAKEIT
-      run: make -j2
+      # We removed 'make clean' to save time since checkout wipes the directory.
+      run: make -j$(nproc)
 
     - name: Final Disk Usage
       run: df -h
 
-    - name: upload artifact
+    - name: Upload Artifact
+      if: success()
       uses: actions/upload-artifact@v4
       with:
         name: shredos-fork-build
