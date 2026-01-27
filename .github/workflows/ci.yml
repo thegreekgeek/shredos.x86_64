@@ -20,6 +20,10 @@ on:
         required: false
         default: 'current'
 
+# Set minimal permissions for GITHUB_TOKEN
+permissions:
+  contents: read
+
 jobs:
   validate:
     name: Validate Repository Structure

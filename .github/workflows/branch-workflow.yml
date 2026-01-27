@@ -26,6 +26,10 @@ on:
   #     - 'release/**'
   #     - 'hotfix/**'
 
+# Set minimal permissions for GITHUB_TOKEN
+permissions:
+  contents: read
+
 jobs:
   branch-info:
     name: Branch Information
