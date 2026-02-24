@@ -329,10 +329,13 @@ fi
 #
 country_code=""
 nwipe_options_string=""
+wiper_options_string=""
 lftp_command_line=""
 http_post_url=""
 autopoweroff=0
+use_wiper=1
 logfile="nwipe_log_$(date +%Y%m%d-%H%M%S).txt"
+wiper_logfile="wiper_log_$(date +%Y%m%d-%H%M%S).txt"
 
 # read the kernel command line for the loadkeys label for setting the correct keyboard layout
 #
@@ -343,6 +346,23 @@ then
 	then
 		loadkeys $country_code
 	fi
+fi
+
+# read the kernel command line for wiper options
+#
+wiper_options_string=$(kernel_cmdline_extractor wiper_options)
+if [ $? == 0 ]
+then
+	wiper_options_flag=1
+else
+	wiper_options_flag=0
+fi
+
+# check if user wants nwipe-only mode
+nwipe_only=$(kernel_cmdline_extractor nwipe_only)
+if [[ "$nwipe_only" == "yes" ]]
+then
+	use_wiper=0
 fi
 
 # read the kernel command line for nwipe options
@@ -366,7 +386,7 @@ then
 	*--autopoweroff*) autopoweroff=1 ;;
 	*               ) autopoweroff=0 ;;
 	esac
-	
+
 	if [ $autopoweroff == 1 ]
 	then
 		echo $nwipe_options_string > nwipe_options.txt
@@ -431,7 +451,7 @@ then
 
 
 else
-	nwipe_options_flag=0	
+	nwipe_options_flag=0
 fi
 
 # Pause for a couple of seconds before launching nwipe so the messages can be read by the user.
@@ -441,11 +461,68 @@ sleep 2
 #
 while true
 do
+	nwipe_verify_options=""
+
+	# ========================================================================
+	# PHASE 1: WIPER (Fast secure erase)
+	# ========================================================================
+	if [ $use_wiper == 1 ]; then
+		printf "\n"
+		printf "═══════════════════════════════════════════════════════════════════════\n"
+		printf " PHASE 1: Fast Secure Erase with Wiper\n"
+		printf "═══════════════════════════════════════════════════════════════════════\n"
+		printf "\n"
+		printf "[`date "$date_format"`] Starting wiper phase...\n" 2>&1 | tee -a $wiper_logfile
+
+		# Build wiper command
+		wiper_cmd="/usr/bin/wiper --yes --skip-verify"
+
+		# Build device list, excluding boot disc if needed
+		device_list=""
+		if [ "$drive" != "" ] && [[ "${exclude_boot_disc_status,,}" == "yes" || -f "/exclude_disc.txt" ]]; then
+			printf "[`date "$date_format"`] Excluding boot drive from wiper: $drive\n" 2>&1 | tee -a $wiper_logfile
+			# Get all block devices except the boot drive
+			for dev in $(lsblk -d -n -o NAME | grep -E "^(sd|nvme)"); do
+				if [ "/dev/$dev" != "$drive" ]; then
+					device_list="$device_list --device $dev"
+				fi
+			done
+		else
+			device_list="--all"
+		fi
+
+		wiper_cmd="$wiper_cmd $device_list"
+
+		# Add user-specified wiper options
+		if [ $wiper_options_flag == 1 ]; then
+			wiper_cmd="$wiper_cmd $wiper_options_string"
+		fi
+
+		# Log and execute
+		printf "[`date "$date_format"`] Executing: $wiper_cmd\n" 2>&1 | tee -a $wiper_logfile
+
+		$wiper_cmd 2>&1 | tee -a $wiper_logfile
+		wiper_exit_code=${PIPESTATUS[0]}
+
+		if [ $wiper_exit_code -eq 0 ]; then
+			printf "\n[`date "$date_format"`] ✓ Wiper phase completed successfully\n\n" 2>&1 | tee -a $wiper_logfile
+		else
+			printf "\n[`date "$date_format"`] ⚠ Wiper exited with code $wiper_exit_code\n\n" 2>&1 | tee -a $wiper_logfile
+		fi
+
+		# Now set nwipe to just do verification since wiper handled the erase
+		nwipe_verify_options="--verify=last --nousb"
+		sleep 2
+	fi
+
+	# ========================================================================
+	# PHASE 2: NWIPE (Verification and PDF generation)
+	# ========================================================================
 	if [ $nwipe_options_flag == 0 ]
 	then
-		/usr/bin/nwipe --logfile=$logfile $launcher_options $exclude_boot_disc_cmd
+		/usr/bin/nwipe --logfile=$logfile $nwipe_verify_options $launcher_options $exclude_boot_disc_cmd
 	else
-		/usr/bin/nwipe --logfile=$logfile $launcher_options $nwipe_options_string $exclude_boot_disc_cmd
+		/usr/bin/nwipe --logfile=$logfile $nwipe_verify_options $launcher_options $nwipe_options_string $exclude_boot_disc_cmd
 	fi
 
 	# ----
@@ -588,8 +665,9 @@ do
 				done
 
 				#loop through all the logs
-				for log in nwipe_log*.txt
+				for log in nwipe_log*.txt wiper_log*.txt
 				do
+					if [ ! -f "$log" ]; then continue; fi
 					lftp $output_debug -c "set xfer:clobber yes; open $output_ip; user $output_user $output_password; lcd /; cd $output_path; put -e $log; close" 2>&1 | tee -a transfer.log
 					if test ${PIPESTATUS[0]} -eq 0
 					then
@@ -622,8 +700,9 @@ do
 					done
 
 					#loop through all the logs
-					for log in nwipe_log*.txt
+					for log in nwipe_log*.txt wiper_log*.txt
 					do
+						if [ ! -f "$log" ]; then continue; fi
 						tftp $output_ip -v -m binary -c put $output_path/$log 2>&1 | tee -a transfer.log tftp_status.txt
 						more tftp_status.txt | grep -i "$tftp_errors"
 						if test ${PIPESTATUS[1]} -ne 0
@@ -847,4 +926,3 @@ do
 	sleep 1
 done
 # end of never ending while loop
-
