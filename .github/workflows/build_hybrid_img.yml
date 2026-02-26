@@ -1,0 +1,65 @@
+name: build_hybrid_img
+
+on:
+  push:
+    branches: ["PrimeWork"]
+  workflow_dispatch:
+    inputs:
+      clean_build:
+        description: "Run make clean before building?"
+        required: false
+        type: boolean
+        default: false
+
+jobs:
+  build:
+    runs-on: self-hosted
+    timeout-minutes: 1440
+
+    # Global environment variables for this job
+    env:
+      # This points Buildroot to a permanent folder on your runner's SSD.
+      # It prevents re-downloading the kernel/sources every time.
+      BR2_DL_DIR: /home/rob/buildroot_dl
+      BR2_CCACHE_DIR: /home/rob/buildroot_ccache # Persistent cache dir
+      USE_CCACHE: 1
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+        with:
+          clean: false
+
+      - name: Check available space
+        run: df -h
+
+      - name: Create Config
+        run: make shredos_iso_extra_defconfig
+
+      - name: Create Persistent Config
+        run: |
+          make shredos_iso_extra_defconfig
+          # Force ccache to 'on' even if the defconfig has it off
+          echo "BR2_CCACHE=y" >> .config
+          echo "BR2_CCACHE_DIR=\"$BR2_CCACHE_DIR\"" >> .config
+          make olddefconfig # Clean up the config file
+
+      - name: Manual Clean
+        if: ${{ github.event.inputs.clean_build == 'true' }}
+        run: make clean
+
+      - name: MAKEIT
+        run: |
+          make -j$(nproc)
+
+      - name: Final Disk Usage
+        run: df -h
+
+      - name: Upload Artifact
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: shredos-fork-build
+          path: |
+            output/images/shredos*.img
+            output/images/shredos*.iso
