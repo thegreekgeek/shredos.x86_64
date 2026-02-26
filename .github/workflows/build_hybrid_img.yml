@@ -2,7 +2,7 @@ name: build_hybrid_img
 
 on:
   push:
-    branches: ["PrimeWork"]
+    branches: ["main-rcsc-dev"]
   workflow_dispatch:
     inputs:
       clean_build:
@@ -33,8 +33,13 @@ jobs:
       - name: Check available space
         run: df -h
 
-      - name: Create Config
-        run: make shredos_iso_extra_defconfig
+      - name: Ensure persistent directories exist
+        run: |
+          mkdir -p /home/rob/buildroot_dl
+          mkdir -p /home/rob/buildroot_ccache
+
+      - name: Clean build output (preserve downloads cache)
+        run: rm -rf output/
 
       - name: Create Persistent Config
         run: |
@@ -48,7 +53,7 @@ jobs:
         if: ${{ github.event.inputs.clean_build == 'true' }}
         run: make clean
 
-      - name: MAKEIT
+      - name: Build
         run: |
           make -j$(nproc)
 
