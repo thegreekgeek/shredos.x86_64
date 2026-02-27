@@ -39,6 +39,7 @@ jobs:
           mkdir -p /home/rob/buildroot_ccache
 
       - name: Clean build output (preserve downloads cache)
+        if: ${{ github.event.inputs.clean_build == 'true' }}
         run: rm -rf output/
 
       - name: Create Persistent Config
