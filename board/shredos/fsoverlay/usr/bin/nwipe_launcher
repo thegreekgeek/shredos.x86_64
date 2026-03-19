@@ -502,7 +502,11 @@ do
 		printf "[`date "$date_format"`] Executing: $wiper_cmd\n" 2>&1 | tee -a $wiper_logfile
 
 	# commenting out for testing porpises
-		echo $wiper_cmd
+		printf "═══════════════════════════════════════════════════════════════════════\n"
+		printf " PHASE !?!: TESTING THE WIPER COMMAND!!!\n"
+		printf "The command for wiper is: $wiper_cmd\n"
+		printf "This is the device list: $device_list
+		printf "═══════════════════════════════════════════════════════════════════════\n"
 		wiper_exit_code=0
 	#	$wiper_cmd 2>&1 | tee -a $wiper_logfile
 	#	wiper_exit_code=${PIPESTATUS[0]}
