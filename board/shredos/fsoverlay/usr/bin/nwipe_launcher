@@ -482,7 +482,7 @@ do
 		if [ "$drive" != "" ] && [[ "${exclude_boot_disc_status,,}" == "yes" || -f "/exclude_disc.txt" ]]; then
 			printf "[`date "$date_format"`] Excluding boot drive from wiper: $drive\n" 2>&1 | tee -a $wiper_logfile
 			# Get all block devices except the boot drive
-			for dev in $(lsblk -d -n -o NAME | grep -E "^(sd|nvme)"); do
+			for dev in $(lsblk -d -n -o NAME,TYPE | awk '$2 == "disk" && $1 ~ /^(sd|nvme)/ {print $1}'); do
 				if [ "/dev/$dev" != "$drive" ]; then
 					device_list="$device_list --device $dev"
 				fi
