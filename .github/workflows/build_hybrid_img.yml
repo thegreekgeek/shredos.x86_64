@@ -54,6 +54,9 @@ jobs:
         if: ${{ github.event.inputs.clean_build == 'true' }}
         run: make clean
 
+      - name: Clean output folder to remove old build images
+        run: rm -rf output/images/
+
       - name: Build
         run: |
           make -j$(nproc)
