@@ -501,8 +501,11 @@ do
 		# Log and execute
 		printf "[`date "$date_format"`] Executing: $wiper_cmd\n" 2>&1 | tee -a $wiper_logfile
 
-		$wiper_cmd 2>&1 | tee -a $wiper_logfile
-		wiper_exit_code=${PIPESTATUS[0]}
+	# commenting out for testing porpises
+		echo $wiper_cmd
+		wiper_exit_code=0
+	#	$wiper_cmd 2>&1 | tee -a $wiper_logfile
+	#	wiper_exit_code=${PIPESTATUS[0]}
 
 		if [ $wiper_exit_code -eq 0 ]; then
 			printf "\n[`date "$date_format"`] ✓ Wiper phase completed successfully\n\n" 2>&1 | tee -a $wiper_logfile
