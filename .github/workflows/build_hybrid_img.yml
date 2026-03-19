@@ -55,7 +55,9 @@ jobs:
         run: make clean
 
       - name: Clean output folder to remove old build images
-        run: rm -rf output/images/
+        run: |
+          rm -rf output/images/shredos*.img
+          rm -rf output/images/shredos*.iso
 
       - name: Build
         run: |
