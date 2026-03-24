@@ -1,0 +1,78 @@
+name: build_hybrid_img_nsh
+
+on:
+  push:
+    branches: ["main-rcsc-dev"]
+  workflow_dispatch:
+    inputs:
+      clean_build:
+        description: "Run make clean?"
+        required: false
+        type: boolean
+        default: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    # GitHub's hard limit is 360. 1440 will be ignored/capped.
+    timeout-minutes: 360 
+
+    steps:
+      - name: Maximize Disk Space
+        uses: easimon/maximize-build-space@v10
+        with:
+          root-reserve-mb: 5120
+          remove-dotnet: 'true'
+          remove-android: 'true'
+          remove-haskell: 'true'
+          remove-docker-images: 'true'
+
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Set up Cache Directories
+        run: |
+          mkdir -p ${{ github.workspace }}/buildroot_dl
+          mkdir -p ${{ github.workspace }}/buildroot_ccache
+
+      - name: Cache Buildroot Downloads
+        uses: actions/cache@v4
+        with:
+          path: ${{ github.workspace }}/buildroot_dl
+          key: br-dl-${{ hashFiles('**/Config.in') }}
+          restore-keys: br-dl-
+
+      - name: Cache Ccache
+        uses: actions/cache@v4
+        with:
+          path: ${{ github.workspace }}/buildroot_ccache
+          key: br-ccache-${{ github.sha }}
+          restore-keys: br-ccache-
+
+      - name: Build
+        env:
+          BR2_DL_DIR: ${{ github.workspace }}/buildroot_dl
+          BR2_CCACHE_DIR: ${{ github.workspace }}/buildroot_ccache
+          USE_CCACHE: 1
+        run: |
+          # 1. Standard Defconfig
+          make shredos_iso_extra_defconfig
+          
+          # 2. Inject environment variables into .config
+          echo "BR2_CCACHE=y" >> .config
+          echo "BR2_CCACHE_DIR=\"$BR2_CCACHE_DIR\"" >> .config
+          echo "BR2_DL_DIR=\"$BR2_DL_DIR\"" >> .config
+          
+          # 3. Finalize config and build
+          make olddefconfig
+          if [[ "${{ github.event.inputs.clean_build }}" == "true" ]]; then make clean; fi
+          make -j$(nproc)
+
+      - name: Upload Artifact
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: shredos-fork-build
+          path: |
+            output/images/shredos*.img
+            output/images/shredos*.iso
