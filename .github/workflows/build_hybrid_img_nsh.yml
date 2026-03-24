@@ -49,6 +49,18 @@ jobs:
           key: br-ccache-${{ github.sha }}
           restore-keys: br-ccache-
 
+      - name: Install host build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            libelf-dev \
+            pkg-config \
+            build-essential \
+            bison flex \
+            bc \
+            rsync \
+            libssl-dev
+
       - name: Build
         env:
           BR2_DL_DIR: ${{ github.workspace }}/buildroot_dl
