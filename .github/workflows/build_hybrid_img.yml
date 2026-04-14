@@ -61,7 +61,7 @@ jobs:
 
       - name: Build
         run: |
-          make -j2
+          make -j1
 
       - name: Final Disk Usage
         run: df -h
