@@ -23,7 +23,7 @@ jobs:
       BR2_DL_DIR: /home/rob/buildroot_dl
       BR2_CCACHE_DIR: /home/rob/buildroot_ccache # Persistent cache dir
       USE_CCACHE: 1
-      BR2_JLEVEL: 4
+      BR2_JLEVEL: 2
 
     steps:
       - name: Checkout Code
@@ -62,7 +62,7 @@ jobs:
 
       - name: Build
         run: |
-          make -j3
+          make -j2
 
       - name: Final Disk Usage
         run: df -h
