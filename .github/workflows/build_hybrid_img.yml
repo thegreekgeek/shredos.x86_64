@@ -39,6 +39,13 @@ jobs:
           mkdir -p /home/rob/buildroot_dl
           mkdir -p /home/rob/buildroot_ccache
 
+      - name: Fix build directory permissions
+        run: |
+          if [ -d output/build ]; then
+            chmod -R u+w output/build/
+            chown -R $(whoami):$(whoami) output/build/
+          fi
+
       - name: Clean build output (preserve downloads cache)
         if: ${{ github.event.inputs.clean_build == 'true' }}
         run: rm -rf output/
