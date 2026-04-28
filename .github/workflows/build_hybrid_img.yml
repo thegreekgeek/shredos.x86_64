@@ -47,6 +47,7 @@ jobs:
         run: |
           make shredos_iso_extra_defconfig
           # Force ccache to 'on' even if the defconfig has it off
+          echo "BR2_JLEVEL=2" >> .config
           echo "BR2_CCACHE=y" >> .config
           echo "BR2_CCACHE_DIR=\"$BR2_CCACHE_DIR\"" >> .config
           make olddefconfig # Clean up the config file
